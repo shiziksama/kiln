@@ -50,6 +50,7 @@ def startup() -> None:
         camera_width=int(os.getenv("KILN_CAMERA_WIDTH", "1280")),
         camera_height=int(os.getenv("KILN_CAMERA_HEIGHT", "720")),
         camera_fps=int(os.getenv("KILN_CAMERA_FPS", "30")),
+        camera_warmup_seconds=float(os.getenv("KILN_CAMERA_WARMUP_SECONDS", "3")),
     )
     collector.start()
 
@@ -95,4 +96,5 @@ def config() -> dict:
         "camera_width": int(os.getenv("KILN_CAMERA_WIDTH", "1280")),
         "camera_height": int(os.getenv("KILN_CAMERA_HEIGHT", "720")),
         "camera_fps": int(os.getenv("KILN_CAMERA_FPS", "30")),
+        "camera_warmup_seconds": float(os.getenv("KILN_CAMERA_WARMUP_SECONDS", "3")),
     }

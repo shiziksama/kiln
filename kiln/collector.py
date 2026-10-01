@@ -27,6 +27,7 @@ class Collector:
         camera_width: int = 1280,
         camera_height: int = 720,
         camera_fps: int = 30,
+        camera_warmup_seconds: float = 3.0,
     ) -> None:
         self.store = store
         self.interval_seconds = interval_seconds
@@ -42,6 +43,7 @@ class Collector:
         self.camera_width = camera_width
         self.camera_height = camera_height
         self.camera_fps = camera_fps
+        self.camera_warmup_seconds = camera_warmup_seconds
         self.sensor = DHTSensor()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -105,6 +107,9 @@ class Collector:
         capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_width)
         capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_height)
         capture.set(cv2.CAP_PROP_FPS, self.camera_fps)
+        deadline = time.monotonic() + self.camera_warmup_seconds
+        while time.monotonic() < deadline:
+            capture.read()
         return capture
 
     def _stabilize_kiln_temperature(self, value: float | None) -> float | None:

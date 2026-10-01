@@ -1,0 +1,27 @@
+[Unit]
+Description=Kiln monitor dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=shiziksama
+Group=shiziksama
+SupplementaryGroups=video
+WorkingDirectory=/home/shiziksama/kiln
+Environment=HOST=0.0.0.0
+Environment=PORT=8010
+Environment=KILN_SOURCE=camera
+Environment=KILN_CAMERA_INDEX=0
+Environment=KILN_CAMERA_BACKEND=v4l2
+Environment=KILN_CAMERA_FOURCC=MJPG
+Environment=KILN_CAMERA_WIDTH=1280
+Environment=KILN_CAMERA_HEIGHT=720
+Environment=KILN_CAMERA_FPS=30
+Environment=KILN_CAMERA_WARMUP_SECONDS=3
+ExecStart=/home/shiziksama/kiln/.venv/bin/python /home/shiziksama/kiln/main.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
