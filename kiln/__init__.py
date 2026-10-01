@@ -1,0 +1,1 @@
+"""Kiln monitoring app."""

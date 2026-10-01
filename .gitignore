@@ -1,1 +1,5 @@
 photos/*
+__pycache__/
+*.pyc
+data/
+static/latest-display.jpg

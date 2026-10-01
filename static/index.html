@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kiln Monitor</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <h1>Kiln Monitor</h1>
+          <p id="status">Очікування даних</p>
+        </div>
+        <div class="source" id="source">source</div>
+      </header>
+
+      <section class="metrics" aria-label="Поточні значення">
+        <article>
+          <span>Температура</span>
+          <strong id="ambient-temperature">--</strong>
+        </article>
+        <article>
+          <span>Вологість</span>
+          <strong id="humidity">--</strong>
+        </article>
+        <article>
+          <span>Пічка</span>
+          <strong id="kiln-temperature">--</strong>
+        </article>
+      </section>
+
+      <section class="dashboard">
+        <div class="chart-panel combined-chart">
+          <div class="panel-title">
+            <h2>Графік показників</h2>
+            <div class="legend" aria-label="Легенда графіка">
+              <button type="button" class="active" data-series="ambient_temperature">
+                <i class="ambient"></i> Температура
+              </button>
+              <button type="button" class="active" data-series="humidity">
+                <i class="humidity"></i> Вологість
+              </button>
+              <button type="button" class="active" data-series="kiln_temperature">
+                <i class="kiln"></i> Пічка
+              </button>
+            </div>
+          </div>
+          <canvas id="readings-chart" height="360"></canvas>
+        </div>
+        <aside class="camera-panel">
+          <div class="panel-title">
+            <h2>Останнє розпізнавання</h2>
+            <span id="last-seen">--</span>
+          </div>
+          <img id="display-crop" src="/static/latest-display.jpg" alt="Обрізаний дисплей пічки" />
+        </aside>
+        <div class="chart-panel minute-chart">
+          <div class="panel-title">
+            <h2>По хвилинах</h2>
+            <span>Середні значення</span>
+          </div>
+          <canvas id="minute-chart" height="320"></canvas>
+        </div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
