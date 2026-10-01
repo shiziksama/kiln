@@ -25,6 +25,30 @@ For local testing when `8000` is busy:
 HOST=127.0.0.1 PORT=8010 .venv/bin/python main.py
 ```
 
+## Systemd
+
+The local dashboard service is `kiln.service`.
+
+```bash
+sudo systemctl status kiln.service
+sudo systemctl restart kiln.service
+```
+
+The optional public ngrok tunnel service is `kiln-ngrok.service`. It starts only
+after an ngrok authtoken is configured:
+
+```bash
+ngrok config add-authtoken "<YOUR_AUTHTOKEN>"
+sudo systemctl enable --now kiln-ngrok.service
+```
+
+Logs:
+
+```bash
+journalctl -u kiln.service -f
+journalctl -u kiln-ngrok.service -f
+```
+
 ## Sources
 
 Use the sample video:

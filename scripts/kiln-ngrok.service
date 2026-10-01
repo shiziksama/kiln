@@ -1,0 +1,19 @@
+[Unit]
+Description=Ngrok tunnel for kiln monitor dashboard
+After=network-online.target kiln.service
+Wants=network-online.target
+Requires=kiln.service
+ConditionPathExists=/home/shiziksama/.config/ngrok/ngrok.yml
+
+[Service]
+Type=simple
+User=shiziksama
+Group=shiziksama
+Environment=HOME=/home/shiziksama
+WorkingDirectory=/home/shiziksama/kiln
+ExecStart=/usr/local/bin/ngrok http 8010 --log=stdout
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
