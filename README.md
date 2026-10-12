@@ -1,6 +1,8 @@
 # kiln
 
-FastAPI dashboard for kiln monitoring:
+The Raspberry Pi runs a Python collector. It stores readings locally and sends
+them to the PHP receiver every 10 seconds. The PHP site reads its SQLite
+database directly and renders the dashboard and charts; FastAPI is not used.
 
 - ambient temperature from DHT11
 - humidity from DHT11
@@ -12,15 +14,18 @@ kiln temperature is stored as `null` and the reading source is `sensor-only`.
 Readings are stored in `data/readings.sqlite3`. If `data/readings.csv` exists from an
 older run, it is imported into SQLite once on startup.
 
-The browser refreshes chart data only while the tab is active.
+The PHP dashboard refreshes its charts every 10 seconds and shows the latest
+120 readings plus minute averages.
 
 ## Remote PHP dashboard
 
 The root `receive.php` endpoint accepts a JSON POST and saves it to SQLite at
-`data/readings.sqlite3` on the PHP server. `index.php` displays the most recent
-measurement and the last 100 readings, refreshing every 10 seconds. The PHP
-server needs PHP's SQLite3 extension and write access to the `data/` directory.
-The receiver accepts POST requests without authentication.
+`data/readings.sqlite3` on the PHP server. `index.php` renders the same two
+charts as the old dashboard: recent readings and per-minute averages, with
+independent toggles for each measurement. It reads chart data from the same PHP
+file and refreshes every 10 seconds. The PHP server needs PHP's SQLite3
+extension and write access to the `data/` directory. The receiver accepts POST
+requests without authentication.
 
 To send readings from this collector, set these environment variables for the
 Python service (for example, add them to `scripts/kiln.service`):
@@ -31,8 +36,8 @@ Environment=KILN_REMOTE_INTERVAL=10
 ```
 
 The JSON record contains `timestamp` (UTC ISO 8601), `ambient_temperature`
-(°C), `humidity` (%), `kiln_temperature` (°C), and `source` (`camera` or
-`video`). The three measurements may be `null` if unavailable. For migration to
+(°C), `humidity` (%), `kiln_temperature` (°C), and `source` (`camera`, `video`,
+or `sensor-only`). The three measurements may be `null` if unavailable. For migration to
 MySQL, these map naturally to `timestamp` (DATETIME/TIMESTAMP), three nullable
 `DOUBLE` columns, and `source` (VARCHAR); keep a unique key on `timestamp`.
 
@@ -40,23 +45,15 @@ When you are ready to provide MySQL connection details, send the hostname, port,
 database name, username, password, whether TLS is required, and the PHP server's
 base URL.
 
-## Run
+## Run the collector
 
 ```bash
 .venv/bin/python main.py
 ```
 
-Open `http://<raspberry-pi-ip>:8000`.
-
-For local testing when `8000` is busy:
-
-```bash
-HOST=127.0.0.1 PORT=8010 .venv/bin/python main.py
-```
-
 ## Systemd
 
-The local dashboard service is `kiln.service`.
+The collector service is `kiln.service`.
 
 ```bash
 sudo systemctl status kiln.service

@@ -1,5 +1,5 @@
 [Unit]
-Description=Kiln monitor dashboard
+Description=Kiln sensor data collector
 After=network-online.target
 Wants=network-online.target
 Wants=kiln-svitlobot-ping.service
@@ -11,8 +11,6 @@ Group=shiziksama
 SupplementaryGroups=video
 WorkingDirectory=/home/shiziksama/kiln
 EnvironmentFile=-/home/shiziksama/kiln/.env
-Environment=HOST=0.0.0.0
-Environment=PORT=8010
 Environment=KILN_SOURCE=camera
 Environment=KILN_CAMERA_INDEX=0
 Environment=KILN_CAMERA_BACKEND=v4l2
