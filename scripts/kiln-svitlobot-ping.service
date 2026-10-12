@@ -1,0 +1,18 @@
+[Unit]
+Description=Periodic SvitloBot channel ping
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/home/shiziksama/kiln/.env
+
+[Service]
+Type=simple
+User=shiziksama
+Group=shiziksama
+WorkingDirectory=/home/shiziksama/kiln
+EnvironmentFile=/home/shiziksama/kiln/.env
+ExecStart=/usr/bin/python3 /home/shiziksama/kiln/scripts/svitlobot_ping.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

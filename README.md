@@ -34,19 +34,25 @@ sudo systemctl status kiln.service
 sudo systemctl restart kiln.service
 ```
 
-The optional public ngrok tunnel service is `kiln-ngrok.service`. It starts only
-after an ngrok authtoken is configured:
-
-```bash
-ngrok config add-authtoken "<YOUR_AUTHTOKEN>"
-sudo systemctl enable --now kiln-ngrok.service
-```
-
 Logs:
 
 ```bash
 journalctl -u kiln.service -f
-journalctl -u kiln-ngrok.service -f
+```
+
+`kiln.service` starts `kiln-svitlobot-ping.service` with it. Add the SvitloBot
+channel key to the project `.env` file:
+
+```bash
+printf 'SVITLOBOT_CHANNEL_KEY=%s\n' '<YOUR_CHANNEL_KEY>' >> .env
+sudo systemctl daemon-reload
+sudo systemctl restart kiln.service
+```
+
+The service then pings the channel every 70 seconds. View its logs with:
+
+```bash
+journalctl -u kiln-svitlobot-ping.service -f
 ```
 
 ## Sources

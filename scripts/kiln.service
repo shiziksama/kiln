@@ -2,6 +2,7 @@
 Description=Kiln monitor dashboard
 After=network-online.target
 Wants=network-online.target
+Wants=kiln-svitlobot-ping.service
 
 [Service]
 Type=simple
