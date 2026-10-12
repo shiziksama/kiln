@@ -1,5 +1,9 @@
 import threading
 import time
+import json
+import os
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import cv2
@@ -50,6 +54,10 @@ class Collector:
         self._capture: cv2.VideoCapture | None = None
         self._last_kiln_temperature: float | None = None
         self._pending_kiln_temperature: float | None = None
+        self._remote_url = os.getenv("KILN_REMOTE_URL", "").strip()
+        self._remote_token = os.getenv("KILN_REMOTE_TOKEN", "")
+        self._remote_interval = max(1.0, float(os.getenv("KILN_REMOTE_INTERVAL", "10")))
+        self._last_remote_send = 0.0
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -88,13 +96,43 @@ class Collector:
                 digits_roi=self.digits_roi,
             )
             kiln_temperature = self._stabilize_kiln_temperature(raw_kiln_temperature)
-            self.store.add(
+            reading = self.store.add(
                 ambient_temperature=ambient_temperature,
                 humidity=humidity,
                 kiln_temperature=kiln_temperature,
                 source="video" if self.video_path is not None else "camera",
             )
+            self._send_remote_if_due(reading)
             time.sleep(self.interval_seconds)
+
+    def _send_remote_if_due(self, reading) -> None:
+        if not self._remote_url:
+            return
+        now = time.monotonic()
+        if now - self._last_remote_send < self._remote_interval:
+            return
+        payload = {
+            "timestamp": reading.timestamp,
+            "ambient_temperature": reading.ambient_temperature,
+            "humidity": reading.humidity,
+            "kiln_temperature": reading.kiln_temperature,
+            "source": reading.source,
+        }
+        headers = {"Content-Type": "application/json"}
+        if self._remote_token:
+            headers["Authorization"] = f"Bearer {self._remote_token}"
+        request = urllib.request.Request(
+            self._remote_url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                if response.status == 200:
+                    self._last_remote_send = now
+        except (urllib.error.URLError, TimeoutError, ValueError) as error:
+            print(f"Remote reading upload failed: {error}", flush=True)
 
     def _open_capture(self) -> cv2.VideoCapture | None:
         if self.video_path is not None:

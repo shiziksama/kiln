@@ -11,6 +11,36 @@ older run, it is imported into SQLite once on startup.
 
 The browser refreshes chart data only while the tab is active.
 
+## Remote PHP dashboard
+
+The root `receive.php` endpoint accepts a JSON POST and saves it to SQLite at
+`data/readings.sqlite3` on the PHP server. `index.php` displays the most recent
+measurement and the last 100 readings, refreshing every 10 seconds. The PHP
+server needs PHP's SQLite3 extension and write access to the `data/` directory.
+Set a long random token in the PHP server environment as `KILN_API_TOKEN`;
+requests without the matching `Authorization: Bearer <token>` are rejected.
+
+To send readings from this collector, set these environment variables for the
+Python service (for example, add them to `scripts/kiln.service`):
+
+```ini
+Environment=KILN_REMOTE_URL=https://your-server.example/receive.php
+Environment=KILN_REMOTE_TOKEN=<same-random-token-as-KILN_API_TOKEN>
+Environment=KILN_REMOTE_INTERVAL=10
+```
+
+The JSON record contains `timestamp` (UTC ISO 8601), `ambient_temperature`
+(°C), `humidity` (%), `kiln_temperature` (°C), and `source` (`camera` or
+`video`). The three measurements may be `null` if unavailable. For migration to
+MySQL, these map naturally to `timestamp` (DATETIME/TIMESTAMP), three nullable
+`DOUBLE` columns, and `source` (VARCHAR); keep a unique key on `timestamp`.
+
+When you are ready to provide MySQL connection details, send the hostname, port,
+database name, username, password (preferably a dedicated restricted user),
+whether TLS is required, and the PHP server's base URL. Do not put credentials
+in chat if you can instead configure them as environment variables on the
+server.
+
 ## Run
 
 ```bash
