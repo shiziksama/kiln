@@ -55,7 +55,6 @@ class Collector:
         self._last_kiln_temperature: float | None = None
         self._pending_kiln_temperature: float | None = None
         self._remote_url = os.getenv("KILN_REMOTE_URL", "").strip()
-        self._remote_token = os.getenv("KILN_REMOTE_TOKEN", "")
         self._remote_interval = max(1.0, float(os.getenv("KILN_REMOTE_INTERVAL", "10")))
         self._last_remote_send = 0.0
 
@@ -76,31 +75,44 @@ class Collector:
 
     def _run(self) -> None:
         self._capture = self._open_capture()
-        if self._capture is None or not self._capture.isOpened():
-            return
+        camera_available = self._capture is not None and self._capture.isOpened()
+        if not camera_available:
+            print("Camera unavailable; continuing with ambient sensor readings", flush=True)
+            if self._capture is not None:
+                self._capture.release()
+                self._capture = None
 
         while not self._stop.is_set():
-            ok, frame = self._capture.read()
-            if not ok:
-                if self.video_path is not None:
-                    self._capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                    continue
-                time.sleep(self.interval_seconds)
-                continue
+            frame = None
+            if camera_available and self._capture is not None:
+                ok, frame = self._capture.read()
+                if not ok:
+                    if self.video_path is not None:
+                        self._capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    frame = None
 
             ambient_temperature, humidity = self.sensor.read()
-            raw_kiln_temperature = read_kiln_temperature(
-                frame,
-                self.display_crop_path,
-                display_roi=self.display_roi,
-                digits_roi=self.digits_roi,
-            )
-            kiln_temperature = self._stabilize_kiln_temperature(raw_kiln_temperature)
+            if frame is None:
+                kiln_temperature = None
+            else:
+                raw_kiln_temperature = read_kiln_temperature(
+                    frame,
+                    self.display_crop_path,
+                    display_roi=self.display_roi,
+                    digits_roi=self.digits_roi,
+                )
+                kiln_temperature = self._stabilize_kiln_temperature(raw_kiln_temperature)
             reading = self.store.add(
                 ambient_temperature=ambient_temperature,
                 humidity=humidity,
                 kiln_temperature=kiln_temperature,
-                source="video" if self.video_path is not None else "camera",
+                source=(
+                    "video"
+                    if self.video_path is not None and camera_available
+                    else "camera"
+                    if camera_available
+                    else "sensor-only"
+                ),
             )
             self._send_remote_if_due(reading)
             time.sleep(self.interval_seconds)
@@ -119,18 +131,17 @@ class Collector:
             "source": reading.source,
         }
         headers = {"Content-Type": "application/json"}
-        if self._remote_token:
-            headers["Authorization"] = f"Bearer {self._remote_token}"
         request = urllib.request.Request(
             self._remote_url,
             data=json.dumps(payload).encode("utf-8"),
             headers=headers,
             method="POST",
         )
+        self._last_remote_send = now
         try:
             with urllib.request.urlopen(request, timeout=5) as response:
-                if response.status == 200:
-                    self._last_remote_send = now
+                if response.status != 200:
+                    print(f"Remote reading upload returned HTTP {response.status}", flush=True)
         except (urllib.error.URLError, TimeoutError, ValueError) as error:
             print(f"Remote reading upload failed: {error}", flush=True)
 

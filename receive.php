@@ -15,15 +15,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     respond(405, ['error' => 'Use POST']);
 }
 
-$expectedToken = getenv('KILN_API_TOKEN') ?: '';
-$authorization = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-if ($expectedToken === '') {
-    respond(503, ['error' => 'Receiver token is not configured']);
-}
-if (!hash_equals('Bearer ' . $expectedToken, $authorization)) {
-    respond(401, ['error' => 'Unauthorized']);
-}
-
 $contentType = strtolower(trim(explode(';', $_SERVER['CONTENT_TYPE'] ?? '')[0]));
 if ($contentType !== 'application/json') {
     respond(415, ['error' => 'Content-Type must be application/json']);

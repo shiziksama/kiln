@@ -4,7 +4,10 @@ FastAPI dashboard for kiln monitoring:
 
 - ambient temperature from DHT11
 - humidity from DHT11
-- kiln temperature parsed from a camera frame
+- kiln temperature parsed from a camera frame when available
+
+If no camera is connected, collection continues using the DHT11 sensor. The
+kiln temperature is stored as `null` and the reading source is `sensor-only`.
 
 Readings are stored in `data/readings.sqlite3`. If `data/readings.csv` exists from an
 older run, it is imported into SQLite once on startup.
@@ -17,15 +20,13 @@ The root `receive.php` endpoint accepts a JSON POST and saves it to SQLite at
 `data/readings.sqlite3` on the PHP server. `index.php` displays the most recent
 measurement and the last 100 readings, refreshing every 10 seconds. The PHP
 server needs PHP's SQLite3 extension and write access to the `data/` directory.
-Set a long random token in the PHP server environment as `KILN_API_TOKEN`;
-requests without the matching `Authorization: Bearer <token>` are rejected.
+The receiver accepts POST requests without authentication.
 
 To send readings from this collector, set these environment variables for the
 Python service (for example, add them to `scripts/kiln.service`):
 
 ```ini
 Environment=KILN_REMOTE_URL=https://your-server.example/receive.php
-Environment=KILN_REMOTE_TOKEN=<same-random-token-as-KILN_API_TOKEN>
 Environment=KILN_REMOTE_INTERVAL=10
 ```
 
@@ -36,10 +37,8 @@ MySQL, these map naturally to `timestamp` (DATETIME/TIMESTAMP), three nullable
 `DOUBLE` columns, and `source` (VARCHAR); keep a unique key on `timestamp`.
 
 When you are ready to provide MySQL connection details, send the hostname, port,
-database name, username, password (preferably a dedicated restricted user),
-whether TLS is required, and the PHP server's base URL. Do not put credentials
-in chat if you can instead configure them as environment variables on the
-server.
+database name, username, password, whether TLS is required, and the PHP server's
+base URL.
 
 ## Run
 
