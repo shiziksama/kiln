@@ -10,6 +10,7 @@ User=shiziksama
 Group=shiziksama
 SupplementaryGroups=video
 WorkingDirectory=/home/shiziksama/kiln
+EnvironmentFile=-/home/shiziksama/kiln/.env
 Environment=HOST=0.0.0.0
 Environment=PORT=8010
 Environment=KILN_SOURCE=camera
