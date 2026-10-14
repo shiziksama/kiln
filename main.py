@@ -8,12 +8,8 @@ from kiln.settings import (
     COLLECT_INTERVAL_SECONDS,
     DEFAULT_VIDEO_PATH,
     DISPLAY_CROP_PATH,
-    LEGACY_READINGS_CSV_PATH,
-    MAX_READINGS,
-    READINGS_DB_PATH,
     parse_roi,
 )
-from kiln.storage import ReadingStore
 from kiln.vision import DEFAULT_DIGITS_ROI, DEFAULT_DISPLAY_ROI
 
 
@@ -22,11 +18,9 @@ def main() -> None:
     signal.signal(signal.SIGINT, lambda _signum, _frame: stop_event.set())
     signal.signal(signal.SIGTERM, lambda _signum, _frame: stop_event.set())
 
-    store = ReadingStore(READINGS_DB_PATH, MAX_READINGS, csv_import_path=LEGACY_READINGS_CSV_PATH)
     source = os.getenv("KILN_SOURCE", "camera")
     video_path = Path(os.getenv("KILN_VIDEO_PATH", str(DEFAULT_VIDEO_PATH)))
     collector = Collector(
-        store=store,
         interval_seconds=float(os.getenv("KILN_INTERVAL", str(COLLECT_INTERVAL_SECONDS))),
         display_crop_path=DISPLAY_CROP_PATH,
         display_roi=parse_roi("KILN_DISPLAY_ROI", DEFAULT_DISPLAY_ROI),
@@ -50,7 +44,6 @@ def main() -> None:
                 raise RuntimeError("Collector stopped unexpectedly")
     finally:
         collector.stop()
-        store.close()
 
 
 if __name__ == "__main__":

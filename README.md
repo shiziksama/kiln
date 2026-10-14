@@ -1,18 +1,17 @@
 # kiln
 
-The Raspberry Pi runs a Python collector. It stores readings locally and sends
-them to the PHP receiver every 10 seconds. The PHP site reads its SQLite
-database directly and renders the dashboard and charts; FastAPI is not used.
+The Raspberry Pi runs a Python collector. It reads sensors and sends readings
+to the PHP receiver; Python does not store readings in a local database. The
+PHP site stores them in its server-side SQLite database and renders the
+dashboard and charts; FastAPI is not used.
 
 - ambient temperature from DHT11
 - humidity from DHT11
 - kiln temperature parsed from a camera frame when available
 
 If no camera is connected, collection continues using the DHT11 sensor. The
-kiln temperature is stored as `null` and the reading source is `sensor-only`.
-
-Readings are stored in `data/readings.sqlite3`. If `data/readings.csv` exists from an
-older run, it is imported into SQLite once on startup.
+kiln temperature is sent as `null` and the reading source is `sensor-only`.
+If `KILN_REMOTE_URL` is unset, readings are collected but not retained.
 
 The PHP dashboard refreshes its charts every 10 seconds and shows the latest
 120 readings plus minute averages.
@@ -20,7 +19,7 @@ The PHP dashboard refreshes its charts every 10 seconds and shows the latest
 ## Remote PHP dashboard
 
 The root `receive.php` endpoint accepts a JSON POST and saves it to SQLite at
-`data/readings.sqlite3` on the PHP server. `index.php` renders the same two
+`data/readings.sqlite3` on the PHP server. `index.php` renders the two
 charts as the old dashboard: recent readings and per-minute averages, with
 independent toggles for each measurement. It reads chart data from the same PHP
 file and refreshes every 10 seconds. The PHP server needs PHP's SQLite3

@@ -4,20 +4,29 @@ import json
 import os
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 import cv2
 
 from kiln.sensors import DHTSensor
-from kiln.storage import ReadingStore
 from kiln.vision import read_kiln_temperature
+
+
+@dataclass(slots=True)
+class Reading:
+    timestamp: str
+    ambient_temperature: float | None
+    humidity: float | None
+    kiln_temperature: float | None
+    source: str
 
 
 class Collector:
     def __init__(
         self,
         *,
-        store: ReadingStore,
         interval_seconds: float,
         display_crop_path: Path,
         display_roi: tuple[int, int, int, int],
@@ -33,7 +42,6 @@ class Collector:
         camera_fps: int = 30,
         camera_warmup_seconds: float = 3.0,
     ) -> None:
-        self.store = store
         self.interval_seconds = interval_seconds
         self.display_crop_path = display_crop_path
         self.display_roi = display_roi
@@ -106,7 +114,8 @@ class Collector:
                     digits_roi=self.digits_roi,
                 )
                 kiln_temperature = self._stabilize_kiln_temperature(raw_kiln_temperature)
-            reading = self.store.add(
+            reading = Reading(
+                timestamp=datetime.now(timezone.utc).isoformat(),
                 ambient_temperature=ambient_temperature,
                 humidity=humidity,
                 kiln_temperature=kiln_temperature,
