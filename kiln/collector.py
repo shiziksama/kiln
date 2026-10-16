@@ -4,6 +4,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,7 +12,10 @@ from pathlib import Path
 import cv2
 
 from kiln.sensors import DHTSensor
-from kiln.vision import read_kiln_temperature
+from kiln.vision import crop_display, read_kiln_temperature
+
+
+OCR_BURST_FRAMES = 12
 
 
 @dataclass(slots=True)
@@ -31,8 +35,6 @@ class Collector:
         display_crop_path: Path,
         display_roi: tuple[int, int, int, int],
         digits_roi: tuple[int, int, int, int],
-        max_temperature_step: float,
-        confirmation_tolerance: float,
         video_path: Path | None = None,
         camera_index: int | None = None,
         camera_backend: str = "v4l2",
@@ -46,8 +48,6 @@ class Collector:
         self.display_crop_path = display_crop_path
         self.display_roi = display_roi
         self.digits_roi = digits_roi
-        self.max_temperature_step = max_temperature_step
-        self.confirmation_tolerance = confirmation_tolerance
         self.video_path = video_path
         self.camera_index = camera_index
         self.camera_backend = camera_backend
@@ -60,8 +60,6 @@ class Collector:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._capture: cv2.VideoCapture | None = None
-        self._last_kiln_temperature: float | None = None
-        self._pending_kiln_temperature: float | None = None
         self._remote_url = os.getenv("KILN_REMOTE_URL", "").strip()
         self._remote_interval = max(1.0, float(os.getenv("KILN_REMOTE_INTERVAL", "10")))
         self._last_remote_send = 0.0
@@ -95,25 +93,32 @@ class Collector:
                 self._capture = None
 
         while not self._stop.is_set():
-            frame = None
+            frames = []
             if camera_available and self._capture is not None:
-                ok, frame = self._capture.read()
-                if not ok:
-                    if self.video_path is not None:
-                        self._capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                    frame = None
+                for _ in range(OCR_BURST_FRAMES):
+                    ok, frame = self._capture.read()
+                    if not ok or frame is None:
+                        if self.video_path is not None:
+                            self._capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                        break
+                    frames.append(frame)
 
             ambient_temperature, humidity = self.sensor.read()
-            if frame is None:
+            if not frames:
                 kiln_temperature = None
             else:
-                raw_kiln_temperature = read_kiln_temperature(
-                    frame,
-                    self.display_crop_path,
-                    display_roi=self.display_roi,
-                    digits_roi=self.digits_roi,
-                )
-                kiln_temperature = self._stabilize_kiln_temperature(raw_kiln_temperature)
+                display = crop_display(frames[-1], self.display_roi)
+                cv2.imwrite(str(self.display_crop_path), display)
+                readings = [
+                    value
+                    for frame in frames
+                    if (value := read_kiln_temperature(
+                        frame,
+                        display_roi=self.display_roi,
+                        digits_roi=self.digits_roi,
+                    )) is not None
+                ]
+                kiln_temperature = Counter(readings).most_common(1)[0][0] if readings else None
             reading = Reading(
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 ambient_temperature=ambient_temperature,
@@ -169,29 +174,8 @@ class Collector:
         capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_width)
         capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_height)
         capture.set(cv2.CAP_PROP_FPS, self.camera_fps)
+        capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         deadline = time.monotonic() + self.camera_warmup_seconds
         while time.monotonic() < deadline:
             capture.read()
         return capture
-
-    def _stabilize_kiln_temperature(self, value: float | None) -> float | None:
-        if value is None:
-            return self._last_kiln_temperature
-
-        if self._last_kiln_temperature is not None:
-            if abs(value - self._last_kiln_temperature) <= self.max_temperature_step:
-                self._last_kiln_temperature = value
-                self._pending_kiln_temperature = None
-            return self._last_kiln_temperature
-
-        if self._pending_kiln_temperature is None:
-            self._pending_kiln_temperature = value
-            return None
-
-        if abs(value - self._pending_kiln_temperature) <= self.confirmation_tolerance:
-            self._last_kiln_temperature = value
-            self._pending_kiln_temperature = None
-            return self._last_kiln_temperature
-
-        self._pending_kiln_temperature = value
-        return None

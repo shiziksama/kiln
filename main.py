@@ -25,8 +25,6 @@ def main() -> None:
         display_crop_path=DISPLAY_CROP_PATH,
         display_roi=parse_roi("KILN_DISPLAY_ROI", DEFAULT_DISPLAY_ROI),
         digits_roi=parse_roi("KILN_DIGITS_ROI", DEFAULT_DIGITS_ROI),
-        max_temperature_step=float(os.getenv("KILN_MAX_STEP", "15")),
-        confirmation_tolerance=float(os.getenv("KILN_CONFIRMATION_TOLERANCE", "3")),
         video_path=video_path if source == "video" else None,
         camera_index=int(os.getenv("KILN_CAMERA_INDEX", "0")) if source == "camera" else None,
         camera_backend=os.getenv("KILN_CAMERA_BACKEND", "v4l2"),

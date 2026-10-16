@@ -111,9 +111,3 @@ KILN_DISPLAY_ROI=220,560,315,175 KILN_DIGITS_ROI=90,30,210,110 .venv/bin/python 
 Format is `x,y,width,height`.
 
 The dashboard shows the latest display crop so the ROI can be checked visually.
-
-Optional filters:
-
-```bash
-KILN_MAX_STEP=15 KILN_CONFIRMATION_TOLERANCE=3 .venv/bin/python main.py
-```

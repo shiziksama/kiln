@@ -6,8 +6,8 @@ import cv2
 import numpy as np
 
 
-DEFAULT_DISPLAY_ROI = (220, 560, 315, 175)
-DEFAULT_DIGITS_ROI = (90, 30, 210, 110)
+DEFAULT_DISPLAY_ROI = (560, 350, 390, 330)
+DEFAULT_DIGITS_ROI = (110, 130, 230, 120)
 
 
 def read_kiln_temperature(
@@ -54,7 +54,7 @@ def _read_with_tesseract(image: np.ndarray) -> str:
                 src.name,
                 "stdout",
                 "--psm",
-                "8",
+                "7",
                 "-c",
                 "tessedit_char_whitelist=0123456789.",
             ],
