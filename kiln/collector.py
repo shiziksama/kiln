@@ -12,7 +12,7 @@ from pathlib import Path
 import cv2
 
 from kiln.sensors import DHTSensor
-from kiln.vision import crop_display, read_kiln_temperature
+from kiln.vision import extract_display, read_kiln_temperature
 
 
 OCR_BURST_FRAMES = 12
@@ -36,7 +36,7 @@ class Collector:
         display_roi: tuple[int, int, int, int],
         digits_roi: tuple[int, int, int, int],
         video_path: Path | None = None,
-        camera_index: int | None = None,
+        camera_index: int | str | None = None,
         camera_backend: str = "v4l2",
         camera_fourcc: str = "MJPG",
         camera_width: int = 1280,
@@ -107,8 +107,10 @@ class Collector:
             if not frames:
                 kiln_temperature = None
             else:
-                display = crop_display(frames[-1], self.display_roi)
-                cv2.imwrite(str(self.display_crop_path), display)
+                display, _ = extract_display(frames[-1], self.display_roi, self.digits_roi)
+                if display.size:
+                    self.display_crop_path.parent.mkdir(parents=True, exist_ok=True)
+                    cv2.imwrite(str(self.display_crop_path), display)
                 readings = [
                     value
                     for frame in frames
@@ -118,7 +120,12 @@ class Collector:
                         digits_roi=self.digits_roi,
                     )) is not None
                 ]
-                kiln_temperature = Counter(readings).most_common(1)[0][0] if readings else None
+                votes = Counter(readings).most_common()
+                kiln_temperature = (
+                    votes[0][0]
+                    if votes and votes[0][1] >= max(3, len(frames) // 2 + 1)
+                    else None
+                )
             reading = Reading(
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 ambient_temperature=ambient_temperature,
@@ -133,7 +140,7 @@ class Collector:
                 ),
             )
             self._send_remote_if_due(reading)
-            time.sleep(self.interval_seconds)
+            self._stop.wait(self.interval_seconds)
 
     def _send_remote_if_due(self, reading) -> None:
         if not self._remote_url:
@@ -155,11 +162,17 @@ class Collector:
             headers=headers,
             method="POST",
         )
-        self._last_remote_send = now
         try:
             with urllib.request.urlopen(request, timeout=5) as response:
                 if response.status != 200:
                     print(f"Remote reading upload returned HTTP {response.status}", flush=True)
+                    return
+                receipt = json.load(response)
+                if not isinstance(receipt, dict) or receipt.get("ok") is not True:
+                    print("Remote reading upload was not acknowledged", flush=True)
+                    return
+                self._last_remote_send = now
+                print(f"Reading uploaded: {json.dumps(payload)}", flush=True)
         except (urllib.error.URLError, TimeoutError, ValueError) as error:
             print(f"Remote reading upload failed: {error}", flush=True)
 

@@ -91,7 +91,7 @@ KILN_SOURCE=video .venv/bin/python main.py
 Use the camera:
 
 ```bash
-KILN_SOURCE=camera KILN_CAMERA_INDEX=0 .venv/bin/python main.py
+KILN_SOURCE=camera KILN_CAMERA_INDEX=/dev/v4l/by-id/usb-Jieli_Technology_USB_Composite_Device-video-index0 .venv/bin/python main.py
 ```
 
 USB capture defaults to V4L2 + MJPG 1280x720 at 30 FPS. Override if needed:
@@ -102,12 +102,70 @@ KILN_CAMERA_BACKEND=v4l2 KILN_CAMERA_FOURCC=MJPG KILN_CAMERA_WIDTH=1280 KILN_CAM
 
 ## Display Calibration
 
-The display crop is configurable without changing code:
+The red display panel is located automatically by default, so small camera
+movements do not invalidate the crop. Digits are read by Tesseract. To disable
+automatic location and use manual coordinates:
 
 ```bash
-KILN_DISPLAY_ROI=220,560,315,175 KILN_DIGITS_ROI=90,30,210,110 .venv/bin/python main.py
+KILN_AUTO_DISPLAY=0 KILN_DISPLAY_ROI=510,225,110,65 KILN_DIGITS_ROI=23,17,66,32 .venv/bin/python main.py
 ```
 
-Format is `x,y,width,height`.
+Format is `x,y,width,height`. The digits ROI is relative to the display crop.
+These defaults were calibrated for the current camera position at 1280x720;
+recalibrate for other positions, resolutions, or the archived sample video.
 
 The dashboard shows the latest display crop so the ROI can be checked visually.
+
+
+## Camera and Tesseract experiments
+
+Recognition uses Tesseract only, with the bundled display font model, a digit
+whitelist, and PSM 7, 13 and 8. Complete results are compared across modes.
+Model provenance and license are in `models/tessdata/README.md`. The
+input is enlarged 4x, thresholded with Otsu, and inverted to dark digits on a
+white background with padding. `KILN_OCR_CHANNEL=green` is the default;
+`red`, `blue`, and `gray` are also supported. On the current bright red display,
+the red channel saturates the background; green preserves more digit contrast.
+The collector requires a strict majority over a burst of 12 frames. Each result
+must contain all three digits, including leading zeros (`KILN_OCR_DIGITS=3`).
+The supported temperature range is 0..999°C. A plausible result from one frame
+is not proof of accuracy; validate at other displayed temperatures.
+
+Capture eight frames and save each full frame, display crop, processed channel
+images, raw Tesseract text, and `report.json` locally (no sensor reads or uploads):
+
+```bash
+.venv/bin/python scripts/camera_probe.py --output data/camera-experiment/new
+```
+
+The probe accepts `--camera 1` or a stable `/dev/v4l/by-id/...-video-index0`
+path, plus `--width`, `--height`, `--samples`, and `--warmup`. It restores the
+previous capture format on exit. Run only when the camera is free. To compare
+saved frames again without opening the camera:
+
+```bash
+.venv/bin/python scripts/camera_probe.py --input data/camera-experiment --output data/camera-experiment/analysis
+```
+
+The probe scales the 720p calibration to the captured frame size, assuming the
+same camera view. The collector uses ROI coordinates exactly as configured.
+Camera experiment files are ignored by Git under `data/`. Changes to the unit
+in `scripts/kiln.service` must be installed and systemd reloaded before they
+affect the running service.
+
+The installed service can use the camera settings drop-in without replacing its
+other settings:
+
+```bash
+sudo install -m 644 scripts/camera.conf /etc/systemd/system/kiln.service.d/camera.conf
+sudo systemctl daemon-reload
+sudo systemctl restart kiln.service
+```
+
+Successful receiver acknowledgments are logged as `Reading uploaded` with the
+actual measurements. Run the OCR checks (including all ten synthetic digit
+shapes and real 025/026 crops at shifted positions):
+
+```bash
+.venv/bin/python -m unittest discover -s tests -v
+```
