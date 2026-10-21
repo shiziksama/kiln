@@ -14,7 +14,13 @@ kiln temperature is sent as `null` and the reading source is `sensor-only`.
 If `KILN_REMOTE_URL` is unset, readings are collected but not retained.
 
 The PHP dashboard refreshes its charts every 10 seconds and shows the latest
-120 readings plus minute averages.
+120 readings plus minute averages for the last 24 hours (1440 minute slots).
+Missing values break chart lines. Hover over either chart to inspect values.
+Zoom the minute chart with the mouse wheel or +/− buttons, drag to pan, and
+use “Усі 24 години” to reset. Zoom ranges from 10 minutes to the full day
+and stays selected across data refreshes.
+The header shows elapsed time since the latest reading and the last successful
+data fetch; both timers update every second.
 
 ## Remote PHP dashboard
 
