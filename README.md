@@ -21,8 +21,9 @@ The PHP dashboard refreshes its charts every 10 seconds and shows the latest
 The root `receive.php` endpoint accepts a JSON POST and saves it to SQLite at
 `data/readings.sqlite3` on the PHP server. `index.php` renders the two
 charts as the old dashboard: recent readings and per-minute averages, with
-independent toggles for each measurement. It reads chart data from the same PHP
-file and refreshes every 10 seconds. The PHP server needs PHP's SQLite3
+independent toggles for each measurement. `index.php` serves the dashboard markup; the browser fetches JSON from
+`data.php` immediately and every 10 seconds while the page is visible.
+`data.php` reads SQLite and returns `readings`, `minutes`, and `latest`. The PHP server needs PHP's SQLite3
 extension and write access to the `data/` directory. The receiver accepts POST
 requests without authentication.
 
