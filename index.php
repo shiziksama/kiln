@@ -9,6 +9,7 @@
     :root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#101312;color:#f4f1ea}*{box-sizing:border-box}body{margin:0;min-width:320px;background:linear-gradient(180deg,rgba(25,31,29,.96),#101312),#101312}.shell{width:min(1180px,calc(100% - 32px));margin:0 auto;padding:28px 0}.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}h1,h2,p{margin:0}h1{font-size:28px;font-weight:760}.topbar p{margin-top:6px;color:#aeb7b1;font-size:14px}.source{min-width:84px;height:36px;display:grid;place-items:center;border:1px solid #3d4944;border-radius:8px;color:#d3d9d5;font-size:13px;text-transform:uppercase}.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:12px}.metrics article,.chart-panel,.latest-panel{border:1px solid #2f3935;border-radius:8px;background:#171d1b}.metrics article{min-height:100px;padding:18px;display:flex;flex-direction:column;justify-content:space-between}.metrics span,.panel-title span,.latest-panel .label{color:#9fa9a4;font-size:13px}.metrics strong{font-size:clamp(30px,5vw,48px);line-height:1}.dashboard{display:grid;grid-template-columns:minmax(0,2fr) minmax(250px,1fr);gap:12px}.chart-panel,.latest-panel{padding:16px;min-width:0}.panel-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.panel-title h2{font-size:15px;font-weight:680}.combined-chart{min-height:430px}.minute-chart{grid-column:1/-1}.legend{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px;color:#b7c0bb;font-size:12px}.legend button{height:30px;padding:0 10px;display:inline-flex;align-items:center;gap:6px;border:1px solid #3d4944;border-radius:8px;background:#1d2421;color:#d6ded9;cursor:pointer;font:inherit;white-space:nowrap}.legend button:not(.active){color:#76817b;background:#141917}.legend button:not(.active) i{opacity:.25}.legend button:focus-visible{outline:2px solid #d6ded9;outline-offset:2px}.legend button:hover{border-color:#596760}.legend i{width:10px;height:10px;display:inline-block;border-radius:999px}.ambient{background:#f2b84b}.humidity{background:#61c3ff}.kiln{background:#ff5a63}canvas{width:100%;height:360px;display:block}.minute-chart canvas{height:320px}.latest-panel .label{margin-bottom:6px}.latest-panel .stamp{font-size:18px;margin-bottom:18px;overflow-wrap:anywhere}.latest-panel .small{color:#aeb7b1;font-size:13px;line-height:1.6}.latest-panel .state{margin-top:18px;padding:10px;border-radius:6px;background:#202925;color:#cbd4ce;font-size:13px}.latest-panel .state.error{background:#382d1c;color:#f2ca84}@media(max-width:820px){.shell{width:min(100% - 20px,1180px);padding:18px 0}.topbar{align-items:flex-start;flex-direction:column}.metrics,.dashboard{grid-template-columns:1fr}.panel-title{align-items:flex-start;flex-direction:column}.minute-chart{grid-column:auto}}
     .chart-panel{position:relative}.chart-tooltip{position:absolute;z-index:2;pointer-events:none;white-space:pre-line;background:#101312;border:1px solid #596760;border-radius:6px;padding:10px;font-size:13px;line-height:1.6;max-width:calc(100% - 20px)}.chart-cursor{position:absolute;width:1px;background:#aeb7b1;pointer-events:none}
     .zoom-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.zoom-controls button{background:#202925;color:#f4f1ea;border:1px solid #596760;border-radius:6px;padding:6px 12px;cursor:pointer}.zoom-controls button:disabled{opacity:.4;cursor:default}.zoom-controls span,.zoom-help{color:#aeb7b1;font-size:12px}.zoom-help{margin:8px 0}#minute-chart{touch-action:pan-y;cursor:grab}#minute-chart.dragging{cursor:grabbing}
+    .power-warning{margin-bottom:16px;padding:14px 16px;border:1px solid #d94b55;border-radius:8px;background:#451d24;color:#ffb4bb}
   </style>
 </head>
 <body>
@@ -17,6 +18,7 @@
       <div><h1>Kiln Monitor</h1><p>Від останнього виміру: <span id="reading-age">—</span><br>Графіки оновлені: <span id="fetch-age">—</span></p></div>
       <div class="source" id="source">—</div>
     </header>
+    <div id="power-warning" class="power-warning" role="status" hidden>У майстерні немає світла</div>
     <section class="metrics" aria-label="Поточні значення">
       <article><span>Температура</span><strong id="ambient-temperature">--</strong></article>
       <article><span>Вологість</span><strong id="humidity">--</strong></article>
@@ -98,7 +100,23 @@
       const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
       return `${Math.floor(seconds / 3600)} год ${String(Math.floor(seconds / 60) % 60).padStart(2,"0")} хв ${String(seconds % 60).padStart(2,"0")} с`;
     }
+    function plural(value, forms) {
+      const lastTwo = value % 100, last = value % 10;
+      return forms[lastTwo >= 11 && lastTwo <= 14 ? 2 : last === 1 ? 0 : last >= 2 && last <= 4 ? 1 : 2];
+    }
     function updateTimers() {
+      const warning = document.getElementById("power-warning");
+      const age = Number.isFinite(latestTimestamp) ? Date.now() - latestTimestamp : 0;
+      warning.hidden = age <= 5 * 60 * 1000;
+      if (!warning.hidden) {
+        const totalMinutes = Math.floor(age / 60000);
+        const hours = Math.floor(totalMinutes / 60), minutes = totalMinutes % 60;
+        const duration = [
+          ...(hours ? [`${hours} ${plural(hours, ["годину", "години", "годин"])}`] : []),
+          `${minutes} ${plural(minutes, ["хвилину", "хвилини", "хвилин"])}`,
+        ].join(" ");
+        warning.textContent = `У майстерні немає світла ${duration}`;
+      }
       document.getElementById("reading-age").textContent = elapsed(latestTimestamp);
       document.getElementById("fetch-age").textContent = lastFetchAt === null ? "—" : `${Math.max(0, Math.floor((Date.now() - lastFetchAt) / 1000))} с тому`;
     }
