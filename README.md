@@ -180,7 +180,11 @@ shapes and real 025/026 crops at shifted positions):
 ## Automatic OCR archive for offline debugging
 
 The collector saves every OCR burst under `data/ocr-archive` by default,
-including successful and failed readings. The archive is limited to 10 GB
+including successful and failed readings. Each frame is saved as a lossless
+color PNG crop of the display panel, retaining its border around the digits.
+One full-frame lossless PNG is also saved on the first burst and then on the
+first burst at least 60 seconds after the previous full-frame snapshot.
+Restarting the collector starts this snapshot timer again. The archive is limited to 10 GB
 (10,000,000,000 bytes): before saving a burst, the oldest complete bursts are
 deleted until it fits. Other files in the archive directory count toward the
 limit but are not deleted. If a burst cannot fit, it is skipped. An interrupted
@@ -194,9 +198,13 @@ Environment=KILN_OCR_ARCHIVE_MAX_BYTES=10000000000
 ```
 
 Restart the installed service after configuring its environment. Set the size
-limit to 0 to disable recording. Each burst contains lossless full-frame PNGs and
-`capture.json` with per-frame values, the final majority result, calibration and
-OCR settings. Copy useful examples before they
+limit to 0 to disable recording. Version 2 `capture.json` records per-frame
+values, crop coordinates in the source frame, local digit coordinates, the final
+majority result, calibration and OCR settings. A missing display is recorded
+without a crop; it does not trigger an extra full-frame snapshot.
+Color crops support channel, brightness, contrast and threshold experiments;
+retesting full-frame display location or surrounding lighting requires one of
+the minute snapshots (`full-frame.png`). Copy useful examples before they
 rotate out. Archive write failures are logged and collection continues.
 
 Copy a burst directory from the collector machine to this machine, then run:
@@ -205,10 +213,14 @@ Copy a burst directory from the collector machine to this machine, then run:
 .venv/bin/python scripts/camera_probe.py --input data/ocr-archive/burst-EXAMPLE --output data/review
 ```
 
-The probe restores the archived calibration/settings and saves channel masks,
-raw OCR text and a report even when the display cannot be located. Use
-`--current-settings` to try settings from the current environment instead
-(the probe then uses its usual 720p calibration scaling). This does not open
+The probe supports both older full-frame archives and version 2 crops. It
+restores the archived calibration/settings and saves channel masks, raw OCR text
+and a report even when the display could not be located. Minute snapshots are
+excluded from burst voting. To analyze a snapshot as a full image, copy it into
+a separate input directory as `frame-snapshot.png`. Use `--current-settings`
+to try settings from the current environment instead. For version 2 crops the
+stored local geometry is always used; for full frames the probe then uses its
+usual 720p calibration scaling. This does not open
 the camera, read sensors or upload readings. Keep examples from different
 lighting conditions and record the actual displayed number separately before
 comparing changes; an accepted OCR result is not a ground-truth label.

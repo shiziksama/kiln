@@ -27,6 +27,10 @@ def read_kiln_temperature(
         crop_path.parent.mkdir(parents=True, exist_ok=True)
         cv2.imwrite(str(crop_path), display)
 
+    return read_digits_temperature(digits)
+
+
+def read_digits_temperature(digits: np.ndarray) -> float | None:
     if digits.size == 0:
         return None
     text = _read_with_tesseract(digits)

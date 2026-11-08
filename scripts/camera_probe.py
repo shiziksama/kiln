@@ -13,7 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from kiln.settings import parse_roi
 from kiln.vision import (
     DEFAULT_DISPLAY_ROI, DEFAULT_DIGITS_ROI, _parse_number,
-    _prepare_for_ocr, _run_tesseract, extract_display, read_kiln_temperature,
+    _prepare_for_ocr, _run_tesseract, extract_display,
+    crop_display, crop_digits, read_digits_temperature,
 )
 
 
@@ -34,11 +35,14 @@ def main() -> None:
     display_roi = parse_roi('KILN_DISPLAY_ROI', DEFAULT_DISPLAY_ROI)
     digits_roi = parse_roi('KILN_DIGITS_ROI', DEFAULT_DIGITS_ROI)
     archived = None
-    if args.input and (args.input / 'capture.json').is_file() and not args.current_settings:
+    if args.input and (args.input / 'capture.json').is_file():
         archived = json.loads((args.input / 'capture.json').read_text())
-        display_roi = tuple(archived['display_roi'])
-        digits_roi = tuple(archived['digits_roi'])
-        os.environ.update(archived['settings'])
+        if not args.current_settings:
+            display_roi = tuple(archived['display_roi'])
+            digits_roi = tuple(archived['digits_roi'])
+            os.environ.update(archived['settings'])
+    crop_entries = {Path(entry['file']).stem: entry for entry in archived.get('frames', [])
+                    if entry['file']} if archived and archived.get('format_version') == 2 else {}
     frames = []
     if args.input:
         for path in sorted(args.input.glob('frame-*')):
@@ -82,15 +86,25 @@ def main() -> None:
                 capture.set(cv2.CAP_PROP_FRAME_HEIGHT, original_height)
                 capture.set(cv2.CAP_PROP_FPS, original_fps)
             capture.release()
-    if not frames:
+    if not frames and not (archived and archived.get('format_version') == 2):
         raise RuntimeError('No frames found')
-    results = []
+    results = [
+        {'frame': f'frame-{i:02}', 'temperature': None,
+         'error': 'display_not_found_at_capture', 'ocr': {}}
+        for i, entry in enumerate(archived.get('frames', [])) if not entry['file']
+    ] if archived and archived.get('format_version') == 2 else []
     for name, frame in frames:
         # Calibration coordinates refer to a 1280x720 frame of the same 16:9 view.
-        sx, sy = (1, 1) if archived else (frame.shape[1] / 1280, frame.shape[0] / 720)
+        sx, sy = (1, 1) if archived and not args.current_settings else (frame.shape[1] / 1280, frame.shape[0] / 720)
         def scaled(roi):
             return tuple(round(v * (sx if i % 2 == 0 else sy)) for i, v in enumerate(roi))
-        display, digits = extract_display(frame, scaled(display_roi), scaled(digits_roi))
+        entry = crop_entries.get(name)
+        if entry:
+            # Crop geometry is intrinsic to the file, even with --current-settings.
+            display = crop_display(frame, entry['display_roi'])
+            digits = crop_digits(display, entry['digits_roi'])
+        else:
+            display, digits = extract_display(frame, scaled(display_roi), scaled(digits_roi))
         if display.size == 0 or digits.size == 0:
             results.append({'frame': name, 'temperature': None, 'error': 'display_or_digits_not_found', 'ocr': {}})
             continue
@@ -101,7 +115,7 @@ def main() -> None:
             path = args.output / f'{name}-{channel}.png'
             cv2.imwrite(str(path), mask)
             row['ocr'][channel] = _run_tesseract(mask)
-        row['temperature'] = read_kiln_temperature(frame, display_roi=scaled(display_roi), digits_roi=scaled(digits_roi))
+        row['temperature'] = read_digits_temperature(digits)
         results.append(row)
         print(name, row['ocr'], flush=True)
     summary = {
