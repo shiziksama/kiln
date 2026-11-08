@@ -131,6 +131,8 @@ whitelist, and PSM 7, 13 and 8. Complete results are compared across modes.
 Model provenance and license are in `models/tessdata/README.md`. The
 input is enlarged 4x, thresholded with Otsu, and inverted to dark digits on a
 white background with padding. `KILN_OCR_CHANNEL=green` is the default;
+if green produces no complete result, the blue channel is tried as a fallback,
+including a fixed threshold if both Otsu attempts return no complete reading.
 `red`, `blue`, and `gray` are also supported. On the current bright red display,
 the red channel saturates the background; green preserves more digit contrast.
 The collector requires a strict majority over a burst of 12 frames. Each result
@@ -171,7 +173,7 @@ sudo systemctl restart kiln.service
 
 Successful receiver acknowledgments are logged as `Reading uploaded` with the
 actual measurements. Run the OCR checks (including all ten synthetic digit
-shapes and real 025/026 crops at shifted positions):
+shapes and archived display crops at shifted positions):
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
@@ -179,11 +181,11 @@ shapes and real 025/026 crops at shifted positions):
 
 ## Automatic OCR archive for offline debugging
 
-The collector saves every OCR burst under `data/ocr-archive` by default,
-including successful and failed readings. Each frame is saved as a lossless
+The collector saves failed OCR bursts under `data/ocr-archive` by default;
+bursts with a successful majority result are not archived. Each frame is saved as a lossless
 color PNG crop of the display panel, retaining its border around the digits.
-One full-frame lossless PNG is also saved on the first burst and then on the
-first burst at least 60 seconds after the previous full-frame snapshot.
+One full-frame lossless PNG is also saved with the first failed burst and then
+with the first failed burst at least 60 seconds after the previous snapshot.
 Restarting the collector starts this snapshot timer again. The archive is limited to 10 GB
 (10,000,000,000 bytes): before saving a burst, the oldest complete bursts are
 deleted until it fits. Other files in the archive directory count toward the
@@ -224,3 +226,52 @@ usual 720p calibration scaling. This does not open
 the camera, read sensors or upload readings. Keep examples from different
 lighting conditions and record the actual displayed number separately before
 comparing changes; an accepted OCR result is not a ground-truth label.
+
+## Review the OCR archive
+
+Run the local review page on the machine containing the archive:
+
+```bash
+python3 tools/ocr_review/server.py
+```
+
+Open <http://127.0.0.1:8765/>. The page includes every recorded frame,
+including records with missing crops, as well as full-frame snapshots and other
+PNG files in burst directories. It shows the OCR result recorded at capture
+time, or the latest result from the reprocessing command below. Confirm it, enter the actual
+number, or mark the image unreadable. Full-frame snapshots have no per-frame
+OCR result and can be labeled manually. Progress is stored in
+`data/ocr-review/reviews.sqlite3`; use the download link to export JSON. The
+archive is indexed at server startup, so restart it to include newly captured
+bursts. Use `--archive`, `--database`, or `--port` to override the defaults.
+Keep the archive in place during review: rotation or deletion can remove images.
+These human labels are needed before measuring accuracy or building regression
+tests; a confirmed OCR result alone does not change the OCR implementation.
+
+Run the current OCR over every archive record (missing original results first):
+
+```bash
+.venv/bin/python tools/ocr_review/reprocess.py
+```
+
+Results appear on the page as they become available. Unrecognized images are
+also copied to `data/ocr-review/unrecognized` for later review; they are not
+labeled test cases until their actual values have been checked. The command
+resumes completed work when restarted; use `--again` after OCR changes to retry
+every item, or `--unrecognized` to retry only failed images. Copies of earlier
+failures remain in the directory even after a successful retry. It requires
+OpenCV and Tesseract like the collector.
+
+Compare the current OCR implementation against the labeled images with:
+
+```bash
+.venv/bin/python tools/ocr_review/check_labels.py
+```
+
+This writes `data/ocr-review/check-results.json` with per-image results and
+counts of correct, incorrect, unrecognized, unreadable, and unreviewed items.
+Unreviewed and unreadable items are not treated as passing tests. The command
+returns status 2 while any items remain unreviewed, and status 1 on OCR errors.
+The check
+requires OpenCV and Tesseract, like the collector. Stored crop geometry is used
+for archived display crops; full-frame snapshots use current display detection.

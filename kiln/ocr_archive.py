@@ -17,7 +17,7 @@ class OCRArchive:
         self.max_bytes = max(0, int(os.getenv('KILN_OCR_ARCHIVE_MAX_BYTES', '10000000000')))
 
     def save(self, frames, values, temperature, display_roi, digits_roi):
-        if not frames or not self.max_bytes:
+        if temperature is not None or not frames or not self.max_bytes:
             return
         directory = None
         try:

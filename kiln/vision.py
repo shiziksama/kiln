@@ -96,8 +96,11 @@ def extract_display(frame, display_roi=DEFAULT_DISPLAY_ROI, digits_roi=DEFAULT_D
     return display, crop_digits(display, digits_roi)
 
 
-def _read_with_tesseract(image: np.ndarray) -> str:
-    processed = _prepare_for_ocr(image)
+def _read_with_tesseract(image: np.ndarray, channel: str | None = None, threshold: int | None = None, require_consensus: bool = False) -> str:
+    if threshold is not None:
+        processed = _prepare_for_ocr(image, channel, threshold)
+    else:
+        processed = _prepare_for_ocr(image, channel) if channel else _prepare_for_ocr(image)
     votes: Counter[float] = Counter()
     texts: dict[float, str] = {}
     for psm in (7, 13, 8):
@@ -114,7 +117,27 @@ def _read_with_tesseract(image: np.ndarray) -> str:
     # the burst still needs a strict majority of frames before publishing it.
     if len(votes) == 1:
         value = next(iter(votes))
+        if require_consensus:
+            return ""
+        if channel is None and os.getenv("KILN_OCR_CHANNEL", "green") == "green":
+            # A lone green-mode reading is weak: prefer a blue result agreed
+            # upon by two modes when it is available.
+            blue = _read_with_tesseract(image, channel="blue", require_consensus=True)
+            if blue:
+                return blue
         return texts[value]
+    if require_consensus:
+        return ""
+    if not votes and channel is None and os.getenv("KILN_OCR_CHANNEL", "green") == "green":
+        # Do not override disagreements between complete green-channel readings.
+        return _read_with_tesseract(image, channel="blue")
+    if not votes and channel == "blue" and threshold is None:
+        # Some dim displays need a fixed threshold after Otsu fails.
+        return _read_with_tesseract(image, channel="blue", threshold=100)
+    if not votes and channel == "blue" and threshold == 100:
+        return _read_with_tesseract(image, channel="blue", threshold=160)
+    if not votes and channel == "blue" and threshold == 160:
+        return _read_with_tesseract(image, channel="green", threshold=190)
     return ""
 
 
@@ -138,7 +161,7 @@ def _run_tesseract(processed: np.ndarray, psm: int = 7) -> str:
     return result.stdout.strip()
 
 
-def _prepare_for_ocr(image: np.ndarray, channel: str | None = None) -> np.ndarray:
+def _prepare_for_ocr(image: np.ndarray, channel: str | None = None, threshold: int | None = None) -> np.ndarray:
     # The red cover saturates R; G retains the contrast of the white digit cores.
     channel = channel or os.getenv("KILN_OCR_CHANNEL", "green")
     channels = {"blue": 0, "green": 1, "red": 2}
@@ -149,7 +172,8 @@ def _prepare_for_ocr(image: np.ndarray, channel: str | None = None) -> np.ndarra
     else:
         raise ValueError(f"Unknown OCR channel: {channel}")
     plane = cv2.resize(plane, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
-    _, mask = cv2.threshold(plane, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+    mode = cv2.THRESH_BINARY_INV | (cv2.THRESH_OTSU if threshold is None else 0)
+    _, mask = cv2.threshold(plane, 0 if threshold is None else threshold, 255, mode)
     return cv2.copyMakeBorder(mask, 24, 24, 24, 24, cv2.BORDER_CONSTANT, value=255)
 
 

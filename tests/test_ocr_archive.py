@@ -22,7 +22,7 @@ class OCRArchiveTests(unittest.TestCase):
         }):
             archive = OCRArchive()
             frame = np.zeros((10, 10, 3), dtype=np.uint8)
-            args = ([frame], [25], 25, (0, 0, 10, 10), (0, 0, 10, 10))
+            args = ([frame], [None], None, (0, 0, 10, 10), (0, 0, 10, 10))
             archive.save(*args)
             first = next(Path(temp).iterdir())
             size = sum(p.stat().st_size for p in first.iterdir())
@@ -44,7 +44,7 @@ class OCRArchiveTests(unittest.TestCase):
         }):
             archive = OCRArchive()
             frame = np.zeros((10, 10, 3), dtype=np.uint8)
-            args = ([frame], [25], 25, (0, 0, 10, 10), (0, 0, 10, 10))
+            args = ([frame], [None], None, (0, 0, 10, 10), (0, 0, 10, 10))
             archive.save(*args)
             first = next(Path(temp).iterdir())
             archive.max_bytes = 1
@@ -57,7 +57,7 @@ class OCRArchiveTests(unittest.TestCase):
         }), patch('kiln.ocr_archive.time.monotonic', side_effect=[0, 59, 60]):
             archive = OCRArchive()
             frame = np.random.default_rng(42).integers(0, 256, (72, 128, 3), dtype=np.uint8)
-            args = ([frame] * 12, [25] * 12, 25, (10, 20, 30, 15), (3, 2, 20, 10))
+            args = ([frame] * 12, [None] * 12, None, (10, 20, 30, 15), (3, 2, 20, 10))
             for _ in range(3):
                 archive.save(*args)
             bursts = sorted(Path(temp).iterdir())
@@ -95,7 +95,7 @@ class OCRArchiveTests(unittest.TestCase):
             'KILN_OCR_ARCHIVE_DIR': temp, 'KILN_AUTO_DISPLAY': '1',
         }), patch('kiln.ocr_archive.find_display_roi', return_value=(10, 20, 30, 15)):
             frame = np.random.default_rng(42).integers(0, 256, (72, 128, 3), dtype=np.uint8)
-            OCRArchive().save([frame], [25], 25, (10, 20, 30, 15), (3, 2, 20, 10))
+            OCRArchive().save([frame], [25], None, (10, 20, 30, 15), (3, 2, 20, 10))
             burst = next(Path(temp).iterdir())
             for current in (False, True):
                 output = Path(temp) / ('current' if current else 'original')
@@ -109,6 +109,16 @@ class OCRArchiveTests(unittest.TestCase):
                 result = json.loads((output / 'report.json').read_text())
                 self.assertEqual(len(result['results']), 1)
                 self.assertEqual(result['results'][0]['temperature'], 25)
+
+    def test_successful_burst_is_not_archived(self):
+        with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ, {
+            'KILN_OCR_ARCHIVE_DIR': temp,
+        }):
+            frame = np.zeros((10, 10, 3), dtype=np.uint8)
+            archive = OCRArchive()
+            for temperature in (0, 25):
+                archive.save([frame], [temperature], temperature, (0, 0, 10, 10), (0, 0, 10, 10))
+            self.assertEqual(list(Path(temp).iterdir()), [])
 
 
 if __name__ == '__main__':
