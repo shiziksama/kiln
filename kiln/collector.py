@@ -12,6 +12,7 @@ from pathlib import Path
 import cv2
 
 from kiln.sensors import DHTSensor
+from kiln.ocr_archive import OCRArchive
 from kiln.vision import extract_display, read_kiln_temperature
 
 
@@ -57,6 +58,7 @@ class Collector:
         self.camera_fps = camera_fps
         self.camera_warmup_seconds = camera_warmup_seconds
         self.sensor = DHTSensor()
+        self._ocr_archive = OCRArchive()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._capture: cv2.VideoCapture | None = None
@@ -111,20 +113,24 @@ class Collector:
                 if display.size:
                     self.display_crop_path.parent.mkdir(parents=True, exist_ok=True)
                     cv2.imwrite(str(self.display_crop_path), display)
-                readings = [
-                    value
-                    for frame in frames
-                    if (value := read_kiln_temperature(
+                frame_values = [
+                    read_kiln_temperature(
                         frame,
                         display_roi=self.display_roi,
                         digits_roi=self.digits_roi,
-                    )) is not None
+                    )
+                    for frame in frames
                 ]
+                readings = [value for value in frame_values if value is not None]
                 votes = Counter(readings).most_common()
                 kiln_temperature = (
                     votes[0][0]
                     if votes and votes[0][1] >= max(3, len(frames) // 2 + 1)
                     else None
+                )
+                self._ocr_archive.save(
+                    frames, frame_values, kiln_temperature,
+                    self.display_roi, self.digits_roi,
                 )
             reading = Reading(
                 timestamp=datetime.now(timezone.utc).isoformat(),

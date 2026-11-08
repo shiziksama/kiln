@@ -19,7 +19,8 @@ from kiln.vision import (
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--input', type=Path, help='Analyze saved frame-*.jpg files instead of opening a camera')
+    parser.add_argument('--input', type=Path, help='Analyze saved frame JPEG/PNG files instead of opening a camera')
+    parser.add_argument('--current-settings', action='store_true', help='Use current settings instead of archived calibration/settings')
     parser.add_argument('--output', type=Path, default=Path('data/camera-experiment'))
     parser.add_argument('--camera', default=os.getenv('KILN_CAMERA_INDEX', '/dev/v4l/by-id/usb-Jieli_Technology_USB_Composite_Device-video-index0'))
     parser.add_argument('--width', type=int, default=1280)
@@ -32,9 +33,17 @@ def main() -> None:
     args.output.mkdir(parents=True, exist_ok=True)
     display_roi = parse_roi('KILN_DISPLAY_ROI', DEFAULT_DISPLAY_ROI)
     digits_roi = parse_roi('KILN_DIGITS_ROI', DEFAULT_DIGITS_ROI)
+    archived = None
+    if args.input and (args.input / 'capture.json').is_file() and not args.current_settings:
+        archived = json.loads((args.input / 'capture.json').read_text())
+        display_roi = tuple(archived['display_roi'])
+        digits_roi = tuple(archived['digits_roi'])
+        os.environ.update(archived['settings'])
     frames = []
     if args.input:
-        for path in sorted(args.input.glob('frame-*.jpg')):
+        for path in sorted(args.input.glob('frame-*')):
+            if path.suffix.lower() not in ('.jpg', '.jpeg', '.png') or path.stem.endswith(('-display', '-red', '-green', '-blue', '-gray')):
+                continue
             frame = cv2.imread(str(path))
             if frame is None:
                 raise RuntimeError(f'Cannot read {path}')
@@ -78,12 +87,13 @@ def main() -> None:
     results = []
     for name, frame in frames:
         # Calibration coordinates refer to a 1280x720 frame of the same 16:9 view.
-        sx, sy = frame.shape[1] / 1280, frame.shape[0] / 720
+        sx, sy = (1, 1) if archived else (frame.shape[1] / 1280, frame.shape[0] / 720)
         def scaled(roi):
             return tuple(round(v * (sx if i % 2 == 0 else sy)) for i, v in enumerate(roi))
         display, digits = extract_display(frame, scaled(display_roi), scaled(digits_roi))
         if display.size == 0 or digits.size == 0:
-            raise RuntimeError(f'ROI outside frame {name}')
+            results.append({'frame': name, 'temperature': None, 'error': 'display_or_digits_not_found', 'ocr': {}})
+            continue
         cv2.imwrite(str(args.output / f'{name}-display.png'), display)
         row = {'frame': name, 'width': frame.shape[1], 'height': frame.shape[0], 'ocr': {}}
         for channel in ('red', 'green', 'blue', 'gray'):
@@ -95,7 +105,7 @@ def main() -> None:
         results.append(row)
         print(name, row['ocr'], flush=True)
     summary = {
-        channel: dict(Counter(str(_parse_number(row['ocr'][channel])) for row in results))
+        channel: dict(Counter(str(_parse_number(row['ocr'].get(channel, ''))) for row in results))
         for channel in ('red', 'green', 'blue', 'gray')
     }
     report = {'display_roi_720p': display_roi, 'digits_roi_720p': digits_roi,

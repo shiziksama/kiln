@@ -176,3 +176,39 @@ shapes and real 025/026 crops at shifted positions):
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 ```
+
+## Automatic OCR archive for offline debugging
+
+The collector saves every OCR burst under `data/ocr-archive` by default,
+including successful and failed readings. The archive is limited to 10 GB
+(10,000,000,000 bytes): before saving a burst, the oldest complete bursts are
+deleted until it fits. Other files in the archive directory count toward the
+limit but are not deleted. If a burst cannot fit, it is skipped. An interrupted
+write can leave an incomplete directory, which must be removed manually.
+
+To change the directory or size limit, set these environment variables:
+
+```ini
+Environment=KILN_OCR_ARCHIVE_DIR=/path/to/kiln/data/ocr-archive
+Environment=KILN_OCR_ARCHIVE_MAX_BYTES=10000000000
+```
+
+Restart the installed service after configuring its environment. Set the size
+limit to 0 to disable recording. Each burst contains lossless full-frame PNGs and
+`capture.json` with per-frame values, the final majority result, calibration and
+OCR settings. Copy useful examples before they
+rotate out. Archive write failures are logged and collection continues.
+
+Copy a burst directory from the collector machine to this machine, then run:
+
+```bash
+.venv/bin/python scripts/camera_probe.py --input data/ocr-archive/burst-EXAMPLE --output data/review
+```
+
+The probe restores the archived calibration/settings and saves channel masks,
+raw OCR text and a report even when the display cannot be located. Use
+`--current-settings` to try settings from the current environment instead
+(the probe then uses its usual 720p calibration scaling). This does not open
+the camera, read sensors or upload readings. Keep examples from different
+lighting conditions and record the actual displayed number separately before
+comparing changes; an accepted OCR result is not a ground-truth label.
